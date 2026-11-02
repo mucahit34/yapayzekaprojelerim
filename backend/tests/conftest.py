@@ -15,6 +15,20 @@ from app.core.db import Base, get_db
 from app.main import app
 
 
+@pytest.fixture(autouse=True)
+def _reset_login_rate_limit_state():
+    # app.services.auth'daki _failed_attempts/_locked_until modül seviyesi
+    # (süreç-içi) state'tir; testler arasında sızmaması için her testten
+    # önce ve sonra temizlenir.
+    from app.services import auth as auth_service
+
+    auth_service._failed_attempts.clear()
+    auth_service._locked_until.clear()
+    yield
+    auth_service._failed_attempts.clear()
+    auth_service._locked_until.clear()
+
+
 @pytest_asyncio.fixture
 async def client():
     # StaticPool: :memory: sqlite her yeni bağlantıda sıfırlanır; testler
@@ -41,3 +55,16 @@ async def client():
 
     app.dependency_overrides.clear()
     await engine.dispose()
+
+
+@pytest_asyncio.fixture
+async def auth_headers(client):
+    """Testler için bir kullanıcı kaydeder, giriş yapar ve Authorization
+    header'ı döner — korumalı uç noktaları çağıran testler bunu kullanır."""
+    creds = {"email": "fixture-user@example.com", "password": "yeterince-uzun-parola"}
+    await client.post("/api/auth/register", json=creds)
+    login_resp = await client.post(
+        "/api/auth/login", data={"username": creds["email"], "password": creds["password"]}
+    )
+    token = login_resp.json()["access_token"]
+    return {"Authorization": f"Bearer {token}"}

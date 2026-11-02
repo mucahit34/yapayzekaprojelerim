@@ -11,6 +11,7 @@ from app.models.models import (
     RiskLevel,
     Task,
     TaskStatus,
+    User,
     Validation,
 )
 
@@ -27,5 +28,6 @@ __all__ = [
     "RiskLevel",
     "Task",
     "TaskStatus",
+    "User",
     "Validation",
 ]

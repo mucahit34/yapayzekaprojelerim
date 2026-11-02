@@ -1,7 +1,8 @@
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.routers import ai, assets, health, projects, tasks
+from app.routers import ai, assets, auth, health, projects, tasks
+from app.services.auth import get_current_user
 
 app = FastAPI(
     title="Kişisel AI Güvenlik Asistanı",
@@ -22,8 +23,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# /health ve /auth (register/login) kimlik doğrulaması gerektirmez.
+# Veri değiştiren ve AI çağrısı yapan diğer her şey get_current_user
+# arkasında — bkz. app/services/auth.py ve README 'Bilinen sınırlama'.
+_auth_required = [Depends(get_current_user)]
+
 app.include_router(health.router)
-app.include_router(projects.router, prefix="/api")
-app.include_router(assets.router, prefix="/api")
-app.include_router(tasks.router, prefix="/api")
-app.include_router(ai.router, prefix="/api")
+app.include_router(auth.router, prefix="/api")
+app.include_router(projects.router, prefix="/api", dependencies=_auth_required)
+app.include_router(assets.router, prefix="/api", dependencies=_auth_required)
+app.include_router(tasks.router, prefix="/api", dependencies=_auth_required)
+app.include_router(ai.router, prefix="/api", dependencies=_auth_required)

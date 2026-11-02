@@ -47,19 +47,34 @@ docker compose up -d --build
 
 Backend `http://localhost:8000/health` üzerinden ayakta olduğunu bildirir.
 
-## Bilinen sınırlama — kimlik doğrulama yok
+## Kimlik doğrulama
 
-Backend'de henüz hiçbir kullanıcı/oturum/kimlik doğrulama katmanı yok.
-Özellikle `POST /api/tasks/{id}/approve` uç noktası, `approved_by`
-alanını doğrulanmamış bir sorgu parametresi olarak kabul eder — yani
-backend'e erişebilen herkes herhangi bir yüksek etkili görevi
-"onaylayabilir". Bu, CLAUDE.md'deki onay kuralının teknik bir
-zorunluluk değil, yalnızca bir UI akışı olduğu anlamına gelir.
+Bu kişisel asistan tek kullanıcı için tasarlandı. `/health` ve
+`/api/auth/*` dışındaki her uç nokta JWT bearer token gerektirir
+(`app/services/auth.py`, `get_current_user`).
 
-**Kimlik doğrulama eklenene kadar backend hiçbir ortamda genel ağa veya
-güvenilmeyen istemcilere açılmamalıdır** (yalnızca localhost/VPN/SSH
-tüneli). Gerçek kullanıcı girişi ve yetkilendirme, yol haritasının
-Aşama 2/3 kapsamındadır ve henüz yapılmamıştır.
+İlk kurulum:
+
+```bash
+curl -X POST localhost:8010/api/auth/register \
+  -H 'content-type: application/json' \
+  -d '{"email":"you@example.com","password":"en-az-10-karakter"}'
+curl -X POST localhost:8010/api/auth/login \
+  -d 'username=you@example.com&password=en-az-10-karakter'
+# -> {"access_token": "...", "token_type": "bearer"}
+```
+
+`/register` yalnızca veritabanında hiç kullanıcı yokken çalışır; ikinci
+bir hesap eklemek doğrudan veritabanı erişimi gerektirir — bu kasıtlı
+bir kısıtlama, eksiklik değil.
+
+Token'lar `access_token_expire_minutes` (varsayılan 12 saat) sonra
+geçersiz olur. `/login` 5 başarısız denemeden sonra o e-posta için 60
+saniyelik kilitlenme uygular (süreç-içi, bellekte; yeniden başlatmada
+sıfırlanır). Yine de **backend genel ağa açılmamalıdır**; yalnızca
+localhost/VPN/SSH tüneli üzerinden erişilmelidir — tek kullanıcılı bu
+asistan için rate limiting, parola sıfırlama, çoklu oturum yönetimi gibi
+üretim-seviyesi kontroller henüz yok.
 
 ## Durum
 

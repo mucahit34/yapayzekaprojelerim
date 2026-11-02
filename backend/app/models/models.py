@@ -14,7 +14,7 @@ import enum
 import uuid
 from datetime import datetime
 
-from sqlalchemy import JSON, Enum, ForeignKey, String, Text
+from sqlalchemy import JSON, Boolean, Enum, ForeignKey, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
@@ -23,6 +23,17 @@ from app.core.db import Base
 
 def _uuid() -> str:
     return str(uuid.uuid4())
+
+
+class User(Base):
+    __tablename__ = "users"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False, index=True)
+    hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
+    display_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
 
 
 class FindingStatus(str, enum.Enum):
@@ -147,7 +158,9 @@ class Task(Base):
     status: Mapped[TaskStatus] = mapped_column(Enum(TaskStatus), default=TaskStatus.PENDING)
     # Aktif test / dış hedefe trafik / yüksek riskli işlemler için zorunlu.
     requires_approval: Mapped[bool] = mapped_column(default=True)
-    approved_by: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    # User.email (255) kadar uzun olabilir — approve_task artık buraya
+    # kimlik doğrulanmış kullanıcının e-postasını yazıyor.
+    approved_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
     approved_at: Mapped[datetime | None] = mapped_column(nullable=True)
     result_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())

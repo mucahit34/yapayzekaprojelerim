@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
-import type { Project } from "./api/client";
+import { clearToken, getToken, setUnauthorizedHandler, type Project } from "./api/client";
 import { AssistantPanel } from "./components/AssistantPanel";
+import { LoginScreen } from "./components/LoginScreen";
 import { ReportCanvas } from "./components/ReportCanvas";
 import { RiskSummary } from "./components/RiskSummary";
 import { Sidebar } from "./components/Sidebar";
@@ -9,6 +10,23 @@ import { TEMPLATES, type ReportSection } from "./data/templates";
 let nextSectionSeq = 1;
 
 export default function App() {
+  const [authenticated, setAuthenticated] = useState(() => Boolean(getToken()));
+
+  useEffect(() => {
+    setUnauthorizedHandler(() => setAuthenticated(false));
+  }, []);
+
+  if (!authenticated) {
+    return <LoginScreen onAuthenticated={() => setAuthenticated(true)} />;
+  }
+
+  return <Studio onLogout={() => {
+    clearToken();
+    setAuthenticated(false);
+  }} />;
+}
+
+function Studio({ onLogout }: { onLogout: () => void }) {
   const [activeProject, setActiveProject] = useState<Project | null>(null);
   const [templateId, setTemplateId] = useState(TEMPLATES[0].id);
   const [sectionsByTemplate, setSectionsByTemplate] = useState<Record<string, ReportSection[]>>(
@@ -105,6 +123,13 @@ export default function App() {
             className="rounded-sm bg-ink px-3 py-1.5 font-sans text-sm text-paper hover:bg-ink-soft"
           >
             AI asistan
+          </button>
+          <button
+            type="button"
+            onClick={onLogout}
+            className="hidden font-sans text-sm text-slate-muted hover:text-ink sm:inline-block"
+          >
+            Çıkış yap
           </button>
         </div>
       </header>

@@ -12,8 +12,9 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import get_db
-from app.models import Asset, Project, Task, TaskStatus
+from app.models import Asset, Project, Task, TaskStatus, User
 from app.services.audit import record_audit_event
+from app.services.auth import get_current_user
 from app.services.scope import check_scope
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
@@ -38,7 +39,11 @@ class TaskOut(BaseModel):
 
 
 @router.post("", response_model=TaskOut, status_code=201)
-async def create_task(payload: TaskCreate, db: AsyncSession = Depends(get_db)) -> Task:
+async def create_task(
+    payload: TaskCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> Task:
     project = await db.get(Project, payload.project_id)
     if project is None:
         raise HTTPException(404, "Proje bulunamadı.")
@@ -52,7 +57,7 @@ async def create_task(payload: TaskCreate, db: AsyncSession = Depends(get_db)) -
     if not asset.in_scope or not decision.allowed:
         await record_audit_event(
             db,
-            actor="api",
+            actor=current_user.email,
             action="task.rejected_out_of_scope",
             project_id=project.id,
             details={
@@ -78,7 +83,7 @@ async def create_task(payload: TaskCreate, db: AsyncSession = Depends(get_db)) -
     db.add(task)
     await record_audit_event(
         db,
-        actor="api",
+        actor=current_user.email,
         action="task.created_awaiting_approval",
         project_id=project.id,
         details={"asset_id": asset.id, "identifier": asset.identifier, "title": payload.title},
@@ -90,24 +95,12 @@ async def create_task(payload: TaskCreate, db: AsyncSession = Depends(get_db)) -
 
 @router.post("/{task_id}/approve", response_model=TaskOut)
 async def approve_task(
-    task_id: str, approved_by: str, db: AsyncSession = Depends(get_db)
+    task_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ) -> Task:
-    """GÜVENLİK UYARISI — ÜRETİME HAZIR DEĞİL:
-
-    `approved_by` kimlik doğrulaması yapılmamış bir sorgu parametresidir.
-    Bu uç nokta şu anda herhangi bir kimlik doğrulama/oturum katmanı
-    OLMADAN çalışıyor; bu depoda henüz hiçbir yerde kullanıcı/oturum
-    doğrulaması yok. Dolayısıyla backend'e erişebilen HERKES, istediği
-    ismi 'onaylayan' olarak yazarak herhangi bir yüksek etkili görevi
-    onaylayabilir — CLAUDE.md'nin 'her yüksek etkili işlemden önce ...
-    onay bekle' kuralını bu haliyle teknik olarak zorunlu KILMAZ, yalnızca
-    bir UI akışı önerir.
-
-    Bu uç nokta, gerçek bir kimlik doğrulama/yetkilendirme katmanı
-    (Aşama 2/3'te planlanan) eklenene kadar herkese açık ağlara veya
-    güvenilmeyen istemcilere ASLA açılmamalıdır. Sunucu üzerinde yalnızca
-    localhost/VPN/SSH tüneli üzerinden erişime izin verin.
-    """
+    """Onaylayan kimliği artık istemcinin gönderdiği serbest metinden değil,
+    JWT token'ından (get_current_user) gelir — bkz. app/services/auth.py."""
     task = await db.get(Task, task_id)
     if task is None:
         raise HTTPException(404, "Görev bulunamadı.")
@@ -115,12 +108,12 @@ async def approve_task(
         raise HTTPException(409, f"Görev onay bekleyen durumda değil (durum: {task.status}).")
 
     task.status = TaskStatus.PENDING
-    task.approved_by = approved_by
+    task.approved_by = current_user.email
     task.approved_at = datetime.now(timezone.utc)
 
     await record_audit_event(
         db,
-        actor=approved_by,
+        actor=current_user.email,
         action="task.approved",
         project_id=task.project_id,
         details={"task_id": task.id},

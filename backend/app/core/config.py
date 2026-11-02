@@ -10,6 +10,7 @@ class Settings(BaseSettings):
 
     environment: str = "development"
     app_secret_key: str
+    access_token_expire_minutes: int = 60 * 12  # 12 saat
 
     database_url: str
     redis_url: str = "redis://localhost:6379/0"
