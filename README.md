@@ -76,6 +76,36 @@ localhost/VPN/SSH tüneli üzerinden erişilmelidir — tek kullanıcılı bu
 asistan için rate limiting, parola sıfırlama, çoklu oturum yönetimi gibi
 üretim-seviyesi kontroller henüz yok.
 
+## Telegram botu
+
+Web paneliyle aynı backend/veri modelini paylaşır (`app/telegram/service.py`
+doğrudan aynı servis katmanını ve veritabanını kullanır — ayrı bir mantık
+tekrar yazılmaz). FastAPI sürecinden bağımsız, ayrı bir süreç olarak
+polling modunda çalışır:
+
+```bash
+cd backend
+# .env içinde TELEGRAM_BOT_TOKEN ve TELEGRAM_ALLOWED_USER_IDS dolu olmalı
+python -m app.telegram.bot
+```
+
+**Güvenlik modeli — JWT değil, whitelist:** Telegram tarafında web
+paneliyle aynı kimlik doğrulama akışı yok. Tek koruma,
+`TELEGRAM_ALLOWED_USER_IDS` ortam değişkenindeki (virgülle ayrılmış
+sayısal) Telegram kullanıcı ID listesidir. Bu liste **boşsa veya
+tanımsızsa, fail-closed tasarım gereği hiç kimse** bot'u kullanamaz —
+"boş liste = herkese açık" değildir. Listede olmayan bir kullanıcıya
+bot hiçbir yanıt vermez (komut seti dahi açık edilmez).
+
+Desteklenen komutlar: `/projeler`, `/yeni_proje <ad>`,
+`/gorevler <proje adı veya id>`, `/onayla <task_id>`. `/yeni_proje`
+kasıtlı olarak kapsamı (scope_definition) boş bırakır — fail-closed
+kapsam kontrolü gereği boş kapsam "hiçbir hedef izinli değil" demektir;
+kapsam tanımlamak yapılandırılmış web formundan yapılmalıdır, serbest
+Telegram metninden değil. Telegram üzerinden yapılan onaylar, web
+tarafındaki JWT kullanıcısından değil `telegram:<user_id>` biçiminde
+audit log'a yazılır.
+
 ## Durum
 
 Bu iskelet, salt-okunur sunucu keşfinden sonra sıfırdan başlatılan ayrı bir

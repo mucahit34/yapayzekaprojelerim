@@ -30,6 +30,23 @@ def _reset_login_rate_limit_state():
 
 
 @pytest_asyncio.fixture
+async def db_session():
+    """Telegram servis katmanı gibi FastAPI dependency injection'ı olmadan
+    doğrudan AsyncSession kullanan kodu test etmek için."""
+    engine = create_async_engine(
+        "sqlite+aiosqlite:///:memory:",
+        poolclass=StaticPool,
+        connect_args={"check_same_thread": False},
+    )
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    async with session_factory() as session:
+        yield session
+    await engine.dispose()
+
+
+@pytest_asyncio.fixture
 async def client():
     # StaticPool: :memory: sqlite her yeni bağlantıda sıfırlanır; testler
     # boyunca tek bağlantıyı paylaşmak için gerekli.
