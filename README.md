@@ -76,6 +76,16 @@ localhost/VPN/SSH tüneli üzerinden erişilmelidir — tek kullanıcılı bu
 asistan için rate limiting, parola sıfırlama, çoklu oturum yönetimi gibi
 üretim-seviyesi kontroller henüz yok.
 
+## PDF dışa aktarma
+
+`GET /api/reports/{id}/pdf`, kayıtlı `data_snapshot`'ı Playwright/Chromium
+ile gerçek bir PDF'e render eder. Bu geliştirme sandbox'ında Chromium
+`/opt/pw-browsers/chromium`'da hazır geliyor; gerçek sunucuda
+`playwright install chromium` çalıştırılmalı veya `PLAYWRIGHT_CHROMIUM_PATH`
+ortam değişkeniyle kurulu bir Chromium'un yolu verilmelidir. Chromium
+bulunamazsa uç nokta sahte bir "başarı" döndürmez — 503 ile açık bir hata
+mesajı verir.
+
 ## Telegram botu
 
 Web paneliyle aynı backend/veri modelini paylaşır (`app/telegram/service.py`

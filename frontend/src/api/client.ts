@@ -119,6 +119,80 @@ export async function register(input: {
   });
 }
 
+export interface ReportSnapshot {
+  template: string;
+  sections: { id: string; title: string; kind: string; body: string }[];
+}
+
+export interface Report {
+  id: string;
+  project_id: string;
+  template: string;
+  data_snapshot: ReportSnapshot;
+}
+
+export function listReports(projectId: string): Promise<Report[]> {
+  return request<Report[]>(`/reports?project_id=${encodeURIComponent(projectId)}`);
+}
+
+export function saveReport(input: {
+  project_id: string;
+  template: string;
+  data_snapshot: ReportSnapshot;
+}): Promise<Report> {
+  return request<Report>("/reports", {
+    method: "PUT",
+    body: JSON.stringify(input),
+  });
+}
+
+export interface ReportRevision {
+  id: string;
+  report_id: string;
+  content: ReportSnapshot;
+  is_ai_draft: boolean;
+  approved: boolean;
+}
+
+export function createRevision(
+  reportId: string,
+  input: { content: ReportSnapshot; is_ai_draft: boolean }
+): Promise<ReportRevision> {
+  return request<ReportRevision>(`/reports/${reportId}/revisions`, {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function approveRevision(reportId: string, revisionId: string): Promise<Report> {
+  return request<Report>(`/reports/${reportId}/revisions/${revisionId}/approve`, {
+    method: "POST",
+  });
+}
+
+/** PDF ikili veri döndürdüğü için generic request() yerine ayrı fetch. */
+export async function fetchReportPdf(reportId: string): Promise<Blob> {
+  const token = getToken();
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE_URL}/reports/${reportId}/pdf`, {
+      headers: token ? { authorization: `Bearer ${token}` } : {},
+    });
+  } catch {
+    throw new ApiError("Backend'e ulaşılamadı.");
+  }
+  if (response.status === 401) {
+    clearToken();
+    unauthorizedHandler?.();
+    throw new ApiError("Oturum süresi doldu veya geçersiz. Lütfen tekrar giriş yapın.");
+  }
+  if (!response.ok) {
+    const payload = await response.json().catch(() => null);
+    throw new ApiError(payload?.detail ?? `PDF indirilemedi (${response.status}).`);
+  }
+  return response.blob();
+}
+
 export async function login(email: string, password: string): Promise<void> {
   let response: Response;
   const body = new URLSearchParams({ username: email, password });

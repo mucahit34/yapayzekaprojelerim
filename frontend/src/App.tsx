@@ -1,5 +1,17 @@
 import { useEffect, useMemo, useState } from "react";
-import { clearToken, getToken, setUnauthorizedHandler, type Project } from "./api/client";
+import {
+  ApiError,
+  approveRevision,
+  clearToken,
+  createRevision,
+  fetchReportPdf,
+  getToken,
+  listReports,
+  saveReport,
+  setUnauthorizedHandler,
+  type Project,
+  type Report,
+} from "./api/client";
 import { AssistantPanel } from "./components/AssistantPanel";
 import { LoginScreen } from "./components/LoginScreen";
 import { ReportCanvas } from "./components/ReportCanvas";
@@ -20,11 +32,18 @@ export default function App() {
     return <LoginScreen onAuthenticated={() => setAuthenticated(true)} />;
   }
 
-  return <Studio onLogout={() => {
-    clearToken();
-    setAuthenticated(false);
-  }} />;
+  return (
+    <Studio
+      onLogout={() => {
+        clearToken();
+        setAuthenticated(false);
+      }}
+    />
+  );
 }
+
+type SaveState = "idle" | "saving" | "saved" | "error";
+type ExportState = "idle" | "exporting" | "error";
 
 function Studio({ onLogout }: { onLogout: () => void }) {
   const [activeProject, setActiveProject] = useState<Project | null>(null);
@@ -36,6 +55,15 @@ function Studio({ onLogout }: { onLogout: () => void }) {
   const [assistantOpen, setAssistantOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
+  // Proje+şablon başına kaydedilmiş rapor. null = henüz kaydedilmemiş
+  // (yalnızca yerel taslak) — PDF ve AI revizyon geçmişi bir kayıtlı
+  // rapor gerektirir.
+  const [currentReport, setCurrentReport] = useState<Report | null>(null);
+  const [saveState, setSaveState] = useState<SaveState>("idle");
+  const [saveError, setSaveError] = useState("");
+  const [exportState, setExportState] = useState<ExportState>("idle");
+  const [exportError, setExportError] = useState("");
+
   const activeTemplate = useMemo(
     () => TEMPLATES.find((t) => t.id === templateId) ?? TEMPLATES[0],
     [templateId]
@@ -43,30 +71,60 @@ function Studio({ onLogout }: { onLogout: () => void }) {
   const sections = sectionsByTemplate[templateId] ?? [];
   const activeSection = sections.find((s) => s.id === activeSectionId) ?? null;
 
+  // Proje veya şablon değiştiğinde, o ikili için kaydedilmiş bir rapor
+  // var mı diye backend'e bakılır; varsa kaydedilmiş hali yerel state'in
+  // üzerine yazılır (rapor her zaman tek bir "geçerli" durumu temsil eder).
+  useEffect(() => {
+    if (!activeProject) {
+      setCurrentReport(null);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const reports = await listReports(activeProject.id);
+        if (cancelled) return;
+        const match = reports.find((r) => r.template === templateId) ?? null;
+        setCurrentReport(match);
+        if (match) {
+          setSectionsByTemplate((prev) => ({
+            ...prev,
+            [templateId]: match.data_snapshot.sections as ReportSection[],
+          }));
+        }
+      } catch {
+        // Sessizce yerel taslakta kal — kullanıcı yine de düzenlemeye
+        // devam edebilsin; Kaydet denendiğinde hata zaten gösterilecek.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeProject?.id, templateId]);
+
   function handleSelectTemplate(id: string) {
     setTemplateId(id);
     const firstSection = sectionsByTemplate[id]?.[0];
     if (firstSection) setActiveSectionId(firstSection.id);
     setSidebarOpen(false);
+    setSaveState("idle");
   }
 
   function handleReorder(next: ReportSection[]) {
     setSectionsByTemplate((prev) => ({ ...prev, [templateId]: next }));
+    setSaveState("idle");
   }
 
   function handleAddSection() {
     const id = `custom-${nextSectionSeq++}`;
-    const newSection: ReportSection = {
-      id,
-      title: "Yeni bölüm",
-      kind: "text",
-      body: "",
-    };
+    const newSection: ReportSection = { id, title: "Yeni bölüm", kind: "text", body: "" };
     setSectionsByTemplate((prev) => ({
       ...prev,
       [templateId]: [...(prev[templateId] ?? []), newSection],
     }));
     setActiveSectionId(id);
+    setSaveState("idle");
   }
 
   useEffect(() => {
@@ -83,7 +141,99 @@ function Studio({ onLogout }: { onLogout: () => void }) {
       ...prev,
       [templateId]: prev[templateId].map((s) => (s.id === sectionId ? { ...s, body } : s)),
     }));
+    setSaveState("idle");
   }
+
+  async function handleSave(): Promise<Report | null> {
+    if (!activeProject) {
+      setSaveState("error");
+      setSaveError("Önce bir proje seçin veya oluşturun.");
+      return null;
+    }
+    setSaveState("saving");
+    try {
+      const report = await saveReport({
+        project_id: activeProject.id,
+        template: templateId,
+        data_snapshot: { template: templateId, sections },
+      });
+      setCurrentReport(report);
+      setSaveState("saved");
+      return report;
+    } catch (err) {
+      setSaveState("error");
+      setSaveError(err instanceof ApiError ? err.message : "Kaydedilemedi.");
+      return null;
+    }
+  }
+
+  // AI taslağı uygulandığında: kayıtlı bir rapor varsa, değişikliği
+  // denetlenebilir bir ReportRevision olarak kaydet ve hemen onayla
+  // (buton zaten 'Rapora uygula' = onay anlamına geliyor). Kayıtlı rapor
+  // yoksa yalnızca yerel state güncellenir — ilk kayıt yapılana kadar
+  // AI geçmişi tutulamaz.
+  async function handleApplyDraft(body: string) {
+    if (!activeSection) return;
+    const updatedSections = sections.map((s) =>
+      s.id === activeSection.id ? { ...s, body } : s
+    );
+    setSectionsByTemplate((prev) => ({ ...prev, [templateId]: updatedSections }));
+    setSaveState("idle");
+
+    if (!currentReport) return;
+    try {
+      const revision = await createRevision(currentReport.id, {
+        content: { template: templateId, sections: updatedSections },
+        is_ai_draft: true,
+      });
+      const updatedReport = await approveRevision(currentReport.id, revision.id);
+      setCurrentReport(updatedReport);
+      setSaveState("saved");
+    } catch {
+      // Yerel değişiklik zaten uygulandı; yalnızca denetim kaydı
+      // başarısız oldu. Kullanıcıyı Kaydet'e yönlendirmek için state'i
+      // 'idle' bırakıyoruz (zaten öyle).
+    }
+  }
+
+  async function handleExportPdf() {
+    setExportState("exporting");
+    setExportError("");
+    // PDF her zaman kaydedilmiş data_snapshot'tan üretilir; bu yüzden
+    // currentReport zaten varsa bile her export öncesi tekrar kaydedilir —
+    // aksi halde ekrandaki son (henüz kaydedilmemiş) düzenlemeler PDF'e
+    // yansımaz ve indirilen dosya sessizce bayat kalır.
+    const report = await handleSave();
+    if (!report) {
+      setExportState("error");
+      setExportError("PDF için önce rapor kaydedilmeli; kayıt başarısız oldu.");
+      return;
+    }
+    try {
+      const blob = await fetchReportPdf(report.id);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `rapor-${report.id.slice(0, 8)}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      setExportState("idle");
+    } catch (err) {
+      setExportState("error");
+      setExportError(err instanceof ApiError ? err.message : "PDF indirilemedi.");
+    }
+  }
+
+  const saveLabel =
+    saveState === "saving"
+      ? "Kaydediliyor…"
+      : saveState === "saved"
+        ? "Kaydedildi"
+        : saveState === "error"
+          ? "Tekrar dene"
+          : "Kaydet";
 
   return (
     <div className="flex h-screen flex-col bg-paper text-ink">
@@ -110,12 +260,27 @@ function Studio({ onLogout }: { onLogout: () => void }) {
         <RiskSummary sections={sections} />
 
         <div className="flex flex-shrink-0 items-center gap-2 sm:gap-3">
+          {saveState === "error" && (
+            <span className="hidden font-sans text-xs text-signal-critical sm:inline">
+              {saveError}
+            </span>
+          )}
           <button
             type="button"
-            onClick={() => window.print()}
-            className="hidden rounded-sm border border-slate-line/40 px-3 py-1.5 font-sans text-sm text-ink/80 hover:bg-paper sm:inline-block"
+            onClick={handleSave}
+            disabled={saveState === "saving"}
+            className="hidden rounded-sm border border-slate-line/40 px-3 py-1.5 font-sans text-sm text-ink/80 hover:bg-paper disabled:opacity-50 sm:inline-block"
           >
-            PDF olarak dışa aktar
+            {saveLabel}
+          </button>
+          <button
+            type="button"
+            onClick={handleExportPdf}
+            disabled={exportState === "exporting"}
+            title={exportState === "error" ? exportError : undefined}
+            className="hidden rounded-sm border border-slate-line/40 px-3 py-1.5 font-sans text-sm text-ink/80 hover:bg-paper disabled:opacity-50 sm:inline-block"
+          >
+            {exportState === "exporting" ? "PDF hazırlanıyor…" : "PDF olarak dışa aktar"}
           </button>
           <button
             type="button"
@@ -134,6 +299,12 @@ function Studio({ onLogout }: { onLogout: () => void }) {
         </div>
       </header>
 
+      {exportState === "error" && (
+        <p className="border-b border-slate-line/20 bg-paper-raised px-6 py-2 font-sans text-sm text-signal-critical print:hidden">
+          {exportError}
+        </p>
+      )}
+
       <div className="relative flex flex-1 overflow-hidden">
         {sidebarOpen && (
           <button
@@ -150,7 +321,10 @@ function Studio({ onLogout }: { onLogout: () => void }) {
         >
           <Sidebar
             activeProject={activeProject}
-            onSelectProject={setActiveProject}
+            onSelectProject={(p) => {
+              setActiveProject(p);
+              setSaveState("idle");
+            }}
             templates={TEMPLATES}
             activeTemplateId={templateId}
             onSelectTemplate={handleSelectTemplate}
@@ -173,7 +347,7 @@ function Studio({ onLogout }: { onLogout: () => void }) {
         open={assistantOpen}
         onClose={() => setAssistantOpen(false)}
         activeSection={activeSection}
-        onApplyDraft={(body) => activeSection && handleUpdateSectionBody(activeSection.id, body)}
+        onApplyDraft={handleApplyDraft}
       />
     </div>
   );

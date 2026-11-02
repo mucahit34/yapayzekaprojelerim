@@ -1,8 +1,20 @@
+from contextlib import asynccontextmanager
+
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.routers import ai, assets, auth, health, projects, tasks
+from app.routers import ai, assets, auth, health, projects, reports, tasks
 from app.services.auth import get_current_user
+from app.services.pdf import shutdown_pdf_renderer
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    yield
+    # PDF servisi istekler arasında paylaşılan bir Chromium süreci tutar
+    # (bkz. app/services/pdf.py); süreç kapanırken düzgün kapatılmalı.
+    await shutdown_pdf_renderer()
+
 
 app = FastAPI(
     title="Kişisel AI Güvenlik Asistanı",
@@ -11,6 +23,7 @@ app = FastAPI(
         "ve AI destekli raporlama backend'i."
     ),
     version="0.1.0",
+    lifespan=lifespan,
 )
 
 # Geliştirme ortamında yalnızca localhost frontend origin'ine izin verilir.
@@ -34,3 +47,4 @@ app.include_router(projects.router, prefix="/api", dependencies=_auth_required)
 app.include_router(assets.router, prefix="/api", dependencies=_auth_required)
 app.include_router(tasks.router, prefix="/api", dependencies=_auth_required)
 app.include_router(ai.router, prefix="/api", dependencies=_auth_required)
+app.include_router(reports.router, prefix="/api", dependencies=_auth_required)
