@@ -1,37 +1,66 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { ApiError, requestAiDraft } from "../api/client";
+import type { ReportSection } from "../data/templates";
 
 interface Draft {
-  id: string;
   instruction: string;
-  preview: string;
+  text: string;
+  available: boolean;
 }
 
 interface AssistantPanelProps {
   open: boolean;
   onClose: () => void;
+  activeSection: ReportSection | null;
+  onApplyDraft: (body: string) => void;
 }
 
-export function AssistantPanel({ open, onClose }: AssistantPanelProps) {
+export function AssistantPanel({ open, onClose, activeSection, onApplyDraft }: AssistantPanelProps) {
   const [instruction, setInstruction] = useState("");
   const [draft, setDraft] = useState<Draft | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
-  function requestDraft() {
-    if (!instruction.trim()) return;
-    // Backend hazır olduğunda burası /api/reports/{id}/ai-draft çağırır.
-    // Yanıt her zaman bir taslak olarak gelir; belgeye yazılmaz.
-    setDraft({
-      id: crypto.randomUUID(),
-      instruction,
-      preview:
-        "Taslak önizleme burada görünecek. Hiçbir değişiklik, onaylamadan rapora yazılmaz.",
-    });
-    setInstruction("");
+  async function requestDraft() {
+    if (!instruction.trim() || !activeSection) return;
+    setLoading(true);
+    setError("");
+    try {
+      const response = await requestAiDraft({
+        instruction,
+        section_text: activeSection.body,
+      });
+      setDraft({ instruction, text: response.draft, available: response.available });
+      setInstruction("");
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Beklenmeyen bir hata oluştu.");
+      // Talimat metni silinmiyor: istek başarısız olduğunda kullanıcı
+      // yeniden yazmak zorunda kalmadan tekrar deneyebilsin.
+    } finally {
+      setLoading(false);
+    }
   }
+
+  function applyDraft() {
+    if (!draft) return;
+    onApplyDraft(draft.text);
+    setDraft(null);
+  }
+
+  useEffect(() => {
+    if (!open) return;
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") onClose();
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [open, onClose]);
 
   return (
     <aside
+      aria-label="AI asistan paneli"
       aria-hidden={!open}
-      className={`fixed inset-y-0 right-0 z-20 w-[22rem] border-l border-slate-line/30 bg-paper-raised transition-transform ${
+      className={`fixed inset-y-0 right-0 z-20 w-full border-l border-slate-line/30 bg-paper-raised transition-transform sm:w-[22rem] print:hidden ${
         open ? "translate-x-0" : "translate-x-full"
       }`}
     >
@@ -48,34 +77,47 @@ export function AssistantPanel({ open, onClose }: AssistantPanelProps) {
 
       <div className="flex h-[calc(100%-57px)] flex-col justify-between p-5">
         <div className="space-y-4 overflow-y-auto">
+          {!activeSection && (
+            <p className="font-sans text-sm text-slate-muted">
+              Önce soldaki listeden bir bölüm seçin.
+            </p>
+          )}
+
+          {error && <p className="font-sans text-sm text-signal-critical">{error}</p>}
+
           {draft ? (
             <div className="rounded-sm border border-dashed border-slate-line/50 p-4">
               <p className="mb-1 font-sans text-xs font-medium text-slate-muted">
-                Taslak — onay bekliyor
+                {draft.available ? "Taslak — onay bekliyor" : "AI şu an kullanılamıyor"}
               </p>
               <p className="mb-3 font-sans text-xs text-ink/60">“{draft.instruction}”</p>
-              <p className="font-serif text-sm leading-relaxed text-ink">{draft.preview}</p>
-              <div className="mt-4 flex gap-2">
-                <button
-                  type="button"
-                  className="rounded-sm bg-ink px-3 py-1.5 font-sans text-xs text-paper hover:bg-ink-soft"
-                >
-                  Rapora uygula
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setDraft(null)}
-                  className="rounded-sm border border-slate-line/40 px-3 py-1.5 font-sans text-xs text-ink/70 hover:bg-paper"
-                >
-                  Reddet
-                </button>
-              </div>
+              <p className="font-serif text-sm leading-relaxed text-ink">{draft.text}</p>
+              {draft.available && (
+                <div className="mt-4 flex gap-2">
+                  <button
+                    type="button"
+                    onClick={applyDraft}
+                    className="rounded-sm bg-ink px-3 py-1.5 font-sans text-xs text-paper hover:bg-ink-soft"
+                  >
+                    Rapora uygula
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDraft(null)}
+                    className="rounded-sm border border-slate-line/40 px-3 py-1.5 font-sans text-xs text-ink/70 hover:bg-paper"
+                  >
+                    Reddet
+                  </button>
+                </div>
+              )}
             </div>
           ) : (
-            <p className="font-sans text-sm text-slate-muted">
-              Bir bölümü kısaltmasını, netleştirmesini veya yeniden yazmasını isteyin. Her öneri
-              taslak olarak gelir, siz onaylamadan belgeye yazılmaz.
-            </p>
+            !error && (
+              <p className="font-sans text-sm text-slate-muted">
+                Seçili bölümü kısaltmasını, netleştirmesini veya yeniden yazmasını isteyin. Her
+                öneri taslak olarak gelir, siz onaylamadan belgeye yazılmaz.
+              </p>
+            )
           )}
         </div>
 
@@ -84,15 +126,17 @@ export function AssistantPanel({ open, onClose }: AssistantPanelProps) {
             value={instruction}
             onChange={(e) => setInstruction(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && requestDraft()}
-            placeholder="Örn: Bulgular bölümünü kısalt"
-            className="flex-1 rounded-sm border border-slate-line/30 bg-paper px-3 py-2 font-sans text-sm text-ink placeholder:text-slate-muted focus:border-slate-line"
+            disabled={!activeSection || loading}
+            placeholder="Örn: Bu bölümü kısalt"
+            className="min-w-0 flex-1 rounded-sm border border-slate-line/30 bg-paper px-3 py-2 font-sans text-sm text-ink placeholder:text-slate-muted focus:border-slate-line disabled:opacity-50"
           />
           <button
             type="button"
             onClick={requestDraft}
-            className="rounded-sm bg-ink px-3 py-2 font-sans text-sm text-paper hover:bg-ink-soft"
+            disabled={!activeSection || loading}
+            className="rounded-sm bg-ink px-3 py-2 font-sans text-sm text-paper hover:bg-ink-soft disabled:opacity-50"
           >
-            Sor
+            {loading ? "…" : "Sor"}
           </button>
         </div>
       </div>

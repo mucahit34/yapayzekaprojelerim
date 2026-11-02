@@ -47,6 +47,20 @@ docker compose up -d --build
 
 Backend `http://localhost:8000/health` üzerinden ayakta olduğunu bildirir.
 
+## Bilinen sınırlama — kimlik doğrulama yok
+
+Backend'de henüz hiçbir kullanıcı/oturum/kimlik doğrulama katmanı yok.
+Özellikle `POST /api/tasks/{id}/approve` uç noktası, `approved_by`
+alanını doğrulanmamış bir sorgu parametresi olarak kabul eder — yani
+backend'e erişebilen herkes herhangi bir yüksek etkili görevi
+"onaylayabilir". Bu, CLAUDE.md'deki onay kuralının teknik bir
+zorunluluk değil, yalnızca bir UI akışı olduğu anlamına gelir.
+
+**Kimlik doğrulama eklenene kadar backend hiçbir ortamda genel ağa veya
+güvenilmeyen istemcilere açılmamalıdır** (yalnızca localhost/VPN/SSH
+tüneli). Gerçek kullanıcı girişi ve yetkilendirme, yol haritasının
+Aşama 2/3 kapsamındadır ve henüz yapılmamıştır.
+
 ## Durum
 
 Bu iskelet, salt-okunur sunucu keşfinden sonra sıfırdan başlatılan ayrı bir

@@ -13,3 +13,11 @@
   outline: 2px solid #3b4a5a;
   outline-offset: 2px;
 }
+
+/* Tailwind'in yerleşik `print:` varyantı zaten @media print kurallarını
+   üretir (örn. print:hidden); burada yalnızca sayfa arka planını düzeltiyoruz. */
+@media print {
+  body {
+    background: #fff;
+  }
+}

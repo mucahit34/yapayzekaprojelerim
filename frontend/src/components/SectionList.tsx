@@ -45,7 +45,7 @@ function SectionRow({ section, active, onSelect }: SectionRowProps) {
       <button
         type="button"
         aria-label={`${section.title} bölümünü sürükle`}
-        className="cursor-grab touch-none text-slate-muted hover:text-ink"
+        className="-m-2 flex min-h-11 min-w-11 cursor-grab touch-none items-center justify-center text-slate-muted hover:text-ink"
         {...attributes}
         {...listeners}
       >

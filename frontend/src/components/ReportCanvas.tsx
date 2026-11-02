@@ -1,5 +1,6 @@
 import type { ReportSection, RiskLevel } from "../data/templates";
 import { RISK_LABELS } from "../data/templates";
+import { parseFindingLine } from "../utils/findings";
 
 const RISK_DOT: Record<RiskLevel, string> = {
   critical: "bg-signal-critical",
@@ -8,13 +9,12 @@ const RISK_DOT: Record<RiskLevel, string> = {
   low: "bg-signal-low",
 };
 
-function parseFindingLine(line: string) {
-  const [level, ...rest] = line.split(":");
-  const risk = (level as RiskLevel) in RISK_LABELS ? (level as RiskLevel) : null;
-  return { risk, text: risk ? rest.join(":").trim() : line };
+interface SectionBodyProps {
+  section: ReportSection;
+  onEditBody?: (sectionId: string, body: string) => void;
 }
 
-function SectionBody({ section }: { section: ReportSection }) {
+function SectionBody({ section, onEditBody }: SectionBodyProps) {
   if (section.kind === "cover") {
     const [titleLine, ...rest] = section.body.split("\n");
     return (
@@ -64,8 +64,26 @@ function SectionBody({ section }: { section: ReportSection }) {
     );
   }
 
+  if (onEditBody) {
+    return (
+      <>
+        <textarea
+          value={section.body}
+          onChange={(e) => onEditBody(section.id, e.target.value)}
+          placeholder="Bölüm metnini buraya yazın…"
+          rows={Math.max(3, section.body.split("\n").length + 1)}
+          className="w-full max-w-[60ch] resize-y border-none bg-transparent font-serif text-base leading-relaxed text-ink/90 placeholder:text-ink/30 focus:outline-none print:hidden"
+        />
+        {/* Textarea'lar yazdırmada render edilmez; PDF çıktısı için düz metin. */}
+        <p className="hidden max-w-[60ch] whitespace-pre-wrap font-serif text-base leading-relaxed text-ink/90 print:block">
+          {section.body}
+        </p>
+      </>
+    );
+  }
+
   return (
-    <p className="max-w-[60ch] font-serif text-base leading-relaxed text-ink/90">
+    <p className="max-w-[60ch] whitespace-pre-wrap font-serif text-base leading-relaxed text-ink/90">
       {section.body}
     </p>
   );
@@ -73,24 +91,25 @@ function SectionBody({ section }: { section: ReportSection }) {
 
 interface ReportCanvasProps {
   sections: ReportSection[];
-  activeId: string;
+  onEditSectionBody?: (sectionId: string, body: string) => void;
 }
 
-export function ReportCanvas({ sections, activeId }: ReportCanvasProps) {
+export function ReportCanvas({ sections, onEditSectionBody }: ReportCanvasProps) {
   return (
-    <div className="flex justify-center px-10 py-10">
+    <div className="flex justify-center px-4 py-6 sm:px-10 sm:py-10">
       <div className="w-full max-w-[42rem] bg-paper-raised shadow-[0_1px_2px_rgba(20,24,31,0.08),0_12px_32px_rgba(20,24,31,0.08)]">
-        <div className="space-y-10 px-12 py-14">
+        <div className="space-y-10 px-6 py-10 sm:px-12 sm:py-14">
+          {sections.length === 0 && (
+            <p className="font-sans text-sm text-slate-muted">
+              Bu rapor henüz boş. Soldaki panelden bir bölüm ekleyerek başlayın.
+            </p>
+          )}
           {sections.map((section) => (
-            <section
-              key={section.id}
-              id={`section-${section.id}`}
-              className={`scroll-mt-10 ${section.id === activeId ? "" : ""}`}
-            >
+            <section key={section.id} id={`section-${section.id}`} className="scroll-mt-10">
               {section.kind !== "cover" && (
                 <h2 className="mb-4 font-serif text-xl text-ink">{section.title}</h2>
               )}
-              <SectionBody section={section} />
+              <SectionBody section={section} onEditBody={onEditSectionBody} />
             </section>
           ))}
         </div>
