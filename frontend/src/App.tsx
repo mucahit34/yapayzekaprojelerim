@@ -15,6 +15,7 @@ import {
 import { AssistantPanel } from "./components/AssistantPanel";
 import { LoginScreen } from "./components/LoginScreen";
 import { ReportCanvas } from "./components/ReportCanvas";
+import { RevisionHistory } from "./components/RevisionHistory";
 import { RiskSummary } from "./components/RiskSummary";
 import { Sidebar } from "./components/Sidebar";
 import { TEMPLATES, type ReportSection } from "./data/templates";
@@ -53,6 +54,7 @@ function Studio({ onLogout }: { onLogout: () => void }) {
   );
   const [activeSectionId, setActiveSectionId] = useState(TEMPLATES[0].sections[0].id);
   const [assistantOpen, setAssistantOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   // Proje+şablon başına kaydedilmiş rapor. null = henüz kaydedilmemiş
@@ -284,6 +286,13 @@ function Studio({ onLogout }: { onLogout: () => void }) {
           </button>
           <button
             type="button"
+            onClick={() => setHistoryOpen(true)}
+            className="hidden rounded-sm border border-slate-line/40 px-3 py-1.5 font-sans text-sm text-ink/80 hover:bg-paper sm:inline-block"
+          >
+            Geçmiş
+          </button>
+          <button
+            type="button"
             onClick={() => setAssistantOpen(true)}
             className="rounded-sm bg-ink px-3 py-1.5 font-sans text-sm text-paper hover:bg-ink-soft"
           >
@@ -348,6 +357,12 @@ function Studio({ onLogout }: { onLogout: () => void }) {
         onClose={() => setAssistantOpen(false)}
         activeSection={activeSection}
         onApplyDraft={handleApplyDraft}
+      />
+
+      <RevisionHistory
+        open={historyOpen}
+        onClose={() => setHistoryOpen(false)}
+        reportId={currentReport?.id ?? null}
       />
     </div>
   );

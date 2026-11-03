@@ -94,6 +94,39 @@ async def test_revision_create_and_approve_updates_report(client, auth_headers):
     assert second_approve.status_code == 409
 
 
+async def test_list_revisions_ordered_newest_first_with_actor(client, auth_headers):
+    project_id = await _make_project(client, auth_headers)
+    report_resp = await client.put(
+        "/api/reports",
+        json={"project_id": project_id, "template": "t1", "data_snapshot": SNAPSHOT_V1},
+        headers=auth_headers,
+    )
+    report_id = report_resp.json()["id"]
+
+    first = await client.post(
+        f"/api/reports/{report_id}/revisions",
+        json={"content": SNAPSHOT_V1, "is_ai_draft": False},
+        headers=auth_headers,
+    )
+    second = await client.post(
+        f"/api/reports/{report_id}/revisions",
+        json={"content": SNAPSHOT_V2, "is_ai_draft": True},
+        headers=auth_headers,
+    )
+
+    listing = await client.get(f"/api/reports/{report_id}/revisions", headers=auth_headers)
+    assert listing.status_code == 200
+    revisions = listing.json()
+    assert len(revisions) == 2
+    # En yeni en üstte.
+    assert revisions[0]["id"] == second.json()["id"]
+    assert revisions[1]["id"] == first.json()["id"]
+    # Taslağı oluşturan kullanıcı (fixture-user@example.com) kayıtlı olmalı.
+    assert revisions[0]["created_by"] == "fixture-user@example.com"
+    assert revisions[0]["is_ai_draft"] is True
+    assert "created_at" in revisions[0]
+
+
 async def test_revision_approve_requires_matching_report(client, auth_headers):
     project_id = await _make_project(client, auth_headers)
     report_resp = await client.put(

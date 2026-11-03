@@ -12,6 +12,8 @@ yazar (CLAUDE.md: 'AI değişiklikleri önce taslak olmalı ve onayla
 uygulanmalı')."""
 from __future__ import annotations
 
+from datetime import datetime
+
 from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import select
@@ -52,6 +54,8 @@ class RevisionOut(BaseModel):
     content: dict
     is_ai_draft: bool
     approved: bool
+    created_by: str | None
+    created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -114,7 +118,10 @@ async def create_revision(
     if report is None:
         raise HTTPException(404, "Rapor bulunamadı.")
     revision = ReportRevision(
-        report_id=report_id, content=payload.content, is_ai_draft=payload.is_ai_draft
+        report_id=report_id,
+        content=payload.content,
+        is_ai_draft=payload.is_ai_draft,
+        created_by=current_user.email,
     )
     db.add(revision)
     await record_audit_event(
@@ -127,6 +134,18 @@ async def create_revision(
     await db.commit()
     await db.refresh(revision)
     return revision
+
+
+@router.get("/{report_id}/revisions", response_model=list[RevisionOut])
+async def list_revisions(
+    report_id: str, db: AsyncSession = Depends(get_db)
+) -> list[ReportRevision]:
+    result = await db.execute(
+        select(ReportRevision)
+        .where(ReportRevision.report_id == report_id)
+        .order_by(ReportRevision.created_at.desc())
+    )
+    return list(result.scalars().all())
 
 
 @router.post("/{report_id}/revisions/{revision_id}/approve", response_model=ReportOut)

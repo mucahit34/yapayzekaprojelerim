@@ -152,6 +152,8 @@ export interface ReportRevision {
   content: ReportSnapshot;
   is_ai_draft: boolean;
   approved: boolean;
+  created_by: string | null;
+  created_at: string;
 }
 
 export function createRevision(
@@ -162,6 +164,10 @@ export function createRevision(
     method: "POST",
     body: JSON.stringify(input),
   });
+}
+
+export function listRevisions(reportId: string): Promise<ReportRevision[]> {
+  return request<ReportRevision[]>(`/reports/${reportId}/revisions`);
 }
 
 export function approveRevision(reportId: string, revisionId: string): Promise<Report> {

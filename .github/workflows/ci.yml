@@ -1,0 +1,73 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  backend-test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements-dev.txt
+
+      - name: Install dependencies
+        run: pip install -r requirements-dev.txt
+
+      - name: Run pytest
+        env:
+          DATABASE_URL: "sqlite+aiosqlite:///:memory:"
+          APP_SECRET_KEY: ci-only
+        run: python -m pytest -q
+
+      - name: Verify Alembic migration round-trip
+        env:
+          DATABASE_URL: "sqlite+aiosqlite:///./ci_migration_check.db"
+          APP_SECRET_KEY: ci-only
+        run: |
+          alembic upgrade head
+          alembic downgrade base
+          rm -f ci_migration_check.db
+
+  frontend-build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type-check and build
+        run: npm run build
+
+  docker-build:
+    runs-on: ubuntu-latest
+    # Bu job'un amacı, geliştirme sandbox'ında docker daemon bulunmadığı
+    # için orada doğrulanamayan Dockerfile'ların gerçekten build olduğunu
+    # kanıtlamak — yalnızca derler, hiçbir şey push etmez.
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build backend image
+        run: docker build -t sec-assistant-backend:ci ./backend
+
+      - name: Build frontend image
+        run: docker build -t sec-assistant-frontend:ci ./frontend

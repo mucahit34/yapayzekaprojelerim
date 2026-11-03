@@ -3,6 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.core.config import get_settings
 from app.routers import ai, assets, auth, health, projects, reports, tasks
 from app.services.auth import get_current_user
 from app.services.pdf import shutdown_pdf_renderer
@@ -26,11 +27,13 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# Geliştirme ortamında yalnızca localhost frontend origin'ine izin verilir.
-# Üretimde bu liste dağıtım ortamına göre daraltılmalıdır.
+# İzinli origin'ler CORS_ALLOWED_ORIGINS ortam değişkeninden gelir
+# (varsayılan: yalnızca yerel Vite dev server). docker-compose'daki
+# dockerized frontend farklı bir portta (8081) olduğu için o servis
+# bu değişkeni override eder — bkz. docker-compose.yml.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_origins=get_settings().cors_allowed_origins_list,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

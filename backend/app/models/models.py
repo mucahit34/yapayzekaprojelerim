@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import enum
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import JSON, Boolean, Enum, ForeignKey, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -206,7 +206,14 @@ class ReportRevision(Base):
     # AI önerisi mi yoksa kullanıcı tarafından onaylanmış değişiklik mi.
     is_ai_draft: Mapped[bool] = mapped_column(default=False)
     approved: Mapped[bool] = mapped_column(default=False)
-    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    # Taslağı oluşturan kullanıcının e-postası — sürüm geçmişinde "kim"
+    # sorusuna AuditEvent'e gitmeden doğrudan cevap verir.
+    created_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # server_default=func.now() yerine Python tarafı default: SQLite'ın
+    # CURRENT_TIMESTAMP'i yalnızca saniye hassasiyetinde — aynı saniyede
+    # oluşan iki revizyonun sırası belirsizleşir (geçmiş listesi bunu
+    # 'en yeni en üstte' sıralamak için kullanıyor).
+    created_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(timezone.utc))
 
     report: Mapped[Report] = relationship(back_populates="revisions")
 

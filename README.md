@@ -116,7 +116,46 @@ Telegram metninden değil. Telegram üzerinden yapılan onaylar, web
 tarafındaki JWT kullanıcısından değil `telegram:<user_id>` biçiminde
 audit log'a yazılır.
 
+## CI
+
+`.github/workflows/ci.yml`: her push/PR'da backend pytest + Alembic
+migration round-trip, frontend tip kontrolü + build, ve her iki
+Dockerfile'ın gerçekten build olduğunu doğrular (push yapmaz). Bu depo
+geliştirilen sandbox'ta docker daemon bulunmadığından, Dockerfile'ların
+gerçek bir Docker ortamında çalıştığı yalnızca bu CI üzerinden
+doğrulanabildi — yerel olarak yalnızca `docker compose config` ile
+sözdizimi doğrulandı, gerçek `docker build`/`up` hiç çalıştırılamadı.
+
 ## Durum
 
-Bu iskelet, salt-okunur sunucu keşfinden sonra sıfırdan başlatılan ayrı bir
-geliştirme hattıdır. Sunucudaki hiçbir mevcut servis bu depodan etkilenmez.
+Salt-okunur sunucu keşfinden sonra sıfırdan başlatılan, sunucudaki hiçbir
+mevcut servise dokunmayan ayrı bir geliştirme hattı. Şu an tamamlanmış
+olanlar:
+
+- **Backend:** FastAPI + PostgreSQL/SQLAlchemy, Alembic migration'ları,
+  JWT tabanlı tek-kullanıcı kimlik doğrulama, kapsam kontrolü (fail-closed),
+  audit log, Report/ReportRevision kalıcılığı, Playwright ile gerçek PDF
+  üretimi. 56 pytest testi.
+- **Frontend:** React + TS + Tailwind rapor stüdyosu — 4 şablon, sürükle-bırak
+  bölüm sıralama, backend'e kayıtlı rapor, sürüm/geçmiş görünümü, AI taslağı
+  onay akışı, gerçek PDF indirme, erişilebilirlik denetiminden geçti.
+- **Telegram:** Web paneliyle aynı backend'i paylaşan, whitelist korumalı
+  bot (`/projeler`, `/yeni_proje`, `/gorevler`, `/onayla`).
+- **Dağıtım:** `docker-compose.yml` (backend, frontend, postgres, opsiyonel
+  telegram-bot profili) + CI — ama yukarıda belirtildiği gibi gerçek bir
+  Docker ortamında hiç çalıştırılmadı.
+
+Henüz yapılmayanlar — bunlar gerçek SSH/sunucu erişimi ve kullanıcı onayı
+gerektirir, bu oturumda hiç başlanmadı:
+
+- **Aşama 0/1 (sunucu keşfi/haritalama):** Yalnızca önceki oturumda
+  salt-okunur envanter yapıldı; bu kod tabanı o envantere dayanmaz.
+- **Aşama 2 (güvenli temel):** Ayrı uygulama kullanıcısı, SSH anahtarı,
+  firewall planı, secret yönetimi — sunucuda hiç uygulanmadı.
+- **Aşama 6 (Kali entegrasyonu):** Hiç başlanmadı.
+- **Aşama 7 (üretim ortamında doğrulama):** Yalnızca bu geliştirme
+  sandbox'ında test edildi; gerçek sunucuda hiç çalıştırılmadı.
+
+Ayrıca bilinçli olarak eksik bırakılanlar: Redis hiçbir yerde kullanılmıyor
+(görev kuyruğu uygulanmadı), çok kullanıcılı kimlik doğrulama yok, parola
+sıfırlama yok.
