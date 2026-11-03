@@ -226,4 +226,7 @@ class AuditEvent(Base):
     actor: Mapped[str] = mapped_column(String(100))  # kullanıcı veya agent adı
     action: Mapped[str] = mapped_column(String(255))
     details: Mapped[dict] = mapped_column(JSON, default=dict)
-    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    # ReportRevision.created_at ile aynı sebep: server_default=func.now()
+    # SQLite'ta yalnızca saniye hassasiyetinde — 'son etkinlik' akışı aynı
+    # saniyede oluşan olayları yanlış sıralayabilir.
+    created_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(timezone.utc))

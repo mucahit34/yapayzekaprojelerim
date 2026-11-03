@@ -13,6 +13,7 @@ import {
   type Report,
 } from "./api/client";
 import { AssistantPanel } from "./components/AssistantPanel";
+import { Dashboard } from "./components/Dashboard";
 import { LoginScreen } from "./components/LoginScreen";
 import { ReportCanvas } from "./components/ReportCanvas";
 import { RevisionHistory } from "./components/RevisionHistory";
@@ -34,7 +35,7 @@ export default function App() {
   }
 
   return (
-    <Studio
+    <AppShell
       onLogout={() => {
         clearToken();
         setAuthenticated(false);
@@ -45,9 +46,43 @@ export default function App() {
 
 type SaveState = "idle" | "saving" | "saved" | "error";
 type ExportState = "idle" | "exporting" | "error";
+type View = "studio" | "dashboard";
 
-function Studio({ onLogout }: { onLogout: () => void }) {
+// Proje seçimi iki görünüm (Stüdyo/Kontrol paneli) arasında paylaşılır —
+// biri diğerinde seçileni unutmamalı.
+function AppShell({ onLogout }: { onLogout: () => void }) {
+  const [view, setView] = useState<View>("studio");
   const [activeProject, setActiveProject] = useState<Project | null>(null);
+
+  if (view === "dashboard") {
+    return (
+      <Dashboard
+        activeProject={activeProject}
+        onSelectProject={setActiveProject}
+        onLogout={onLogout}
+        onSwitchView={() => setView("studio")}
+      />
+    );
+  }
+
+  return (
+    <Studio
+      activeProject={activeProject}
+      onSelectProject={setActiveProject}
+      onLogout={onLogout}
+      onSwitchView={() => setView("dashboard")}
+    />
+  );
+}
+
+interface StudioProps {
+  activeProject: Project | null;
+  onSelectProject: (project: Project) => void;
+  onLogout: () => void;
+  onSwitchView: () => void;
+}
+
+function Studio({ activeProject, onSelectProject, onLogout, onSwitchView }: StudioProps) {
   const [templateId, setTemplateId] = useState(TEMPLATES[0].id);
   const [sectionsByTemplate, setSectionsByTemplate] = useState<Record<string, ReportSection[]>>(
     () => Object.fromEntries(TEMPLATES.map((t) => [t.id, t.sections]))
@@ -241,6 +276,21 @@ function Studio({ onLogout }: { onLogout: () => void }) {
     <div className="flex h-screen flex-col bg-paper text-ink">
       <header className="flex items-center justify-between gap-4 border-b border-slate-line/20 bg-paper-raised px-4 py-3 sm:px-6 print:hidden">
         <div className="flex min-w-0 items-center gap-3">
+          <div className="hidden flex-shrink-0 items-center gap-1 rounded-sm border border-slate-line/30 p-0.5 sm:flex">
+            <button
+              type="button"
+              className="rounded-sm bg-ink px-3 py-1 font-sans text-sm text-paper"
+            >
+              Stüdyo
+            </button>
+            <button
+              type="button"
+              onClick={onSwitchView}
+              className="rounded-sm px-3 py-1 font-sans text-sm text-ink/70 hover:bg-paper"
+            >
+              Kontrol paneli
+            </button>
+          </div>
           <button
             type="button"
             onClick={() => setSidebarOpen(true)}
@@ -293,6 +343,19 @@ function Studio({ onLogout }: { onLogout: () => void }) {
           </button>
           <button
             type="button"
+            onClick={onSwitchView}
+            aria-label="Kontrol paneline geç"
+            className="flex min-h-11 min-w-11 flex-shrink-0 items-center justify-center rounded-sm border border-slate-line/30 text-ink/70 hover:bg-paper sm:hidden"
+          >
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
+              <rect x="1.5" y="1.5" width="6" height="6" rx="0.5" stroke="currentColor" strokeWidth="1.3" />
+              <rect x="8.5" y="1.5" width="6" height="4" rx="0.5" stroke="currentColor" strokeWidth="1.3" />
+              <rect x="8.5" y="7.5" width="6" height="7" rx="0.5" stroke="currentColor" strokeWidth="1.3" />
+              <rect x="1.5" y="9.5" width="6" height="5" rx="0.5" stroke="currentColor" strokeWidth="1.3" />
+            </svg>
+          </button>
+          <button
+            type="button"
             onClick={() => setAssistantOpen(true)}
             className="rounded-sm bg-ink px-3 py-1.5 font-sans text-sm text-paper hover:bg-ink-soft"
           >
@@ -331,7 +394,7 @@ function Studio({ onLogout }: { onLogout: () => void }) {
           <Sidebar
             activeProject={activeProject}
             onSelectProject={(p) => {
-              setActiveProject(p);
+              onSelectProject(p);
               setSaveState("idle");
             }}
             templates={TEMPLATES}

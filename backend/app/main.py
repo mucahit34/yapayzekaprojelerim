@@ -4,7 +4,7 @@ from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import get_settings
-from app.routers import ai, assets, auth, health, projects, reports, tasks
+from app.routers import ai, assets, audit, auth, findings, health, projects, reports, tasks
 from app.services.auth import get_current_user
 from app.services.pdf import shutdown_pdf_renderer
 
@@ -51,3 +51,5 @@ app.include_router(assets.router, prefix="/api", dependencies=_auth_required)
 app.include_router(tasks.router, prefix="/api", dependencies=_auth_required)
 app.include_router(ai.router, prefix="/api", dependencies=_auth_required)
 app.include_router(reports.router, prefix="/api", dependencies=_auth_required)
+app.include_router(findings.router, prefix="/api", dependencies=_auth_required)
+app.include_router(audit.router, prefix="/api", dependencies=_auth_required)

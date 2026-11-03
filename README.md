@@ -47,6 +47,25 @@ docker compose up -d --build
 
 Backend `http://localhost:8000/health` üzerinden ayakta olduğunu bildirir.
 
+## Kontrol paneli
+
+Frontend'de "Stüdyo" ve "Kontrol paneli" iki sekme olarak sunulur, aynı
+proje seçimini paylaşır. Kontrol paneli, seçili projenin gerçek backend
+verisini gösterir — uydurma metrik yok:
+
+- **Onay bekleyen görevler**: `awaiting_approval` durumundaki görevler,
+  doğrudan panelden onaylanabilir.
+- **Bulgu durumu**: `suspected → verifying → confirmed` olgunluk sırası
+  (tek rengin açıklık kademesiyle), `false_positive`/
+  `remediated_pending_retest` ayrı gösterilir. Risk seviyesi dağılımı
+  yalnızca `confirmed` bulgular için gösterilir — henüz doğrulanmamış bir
+  bulgunun şiddeti kesinleşmiş sayılmaz.
+- **Raporlar** ve **son etkinlik** (audit log) özetleri.
+
+`GET /api/findings`, `POST /api/findings`, `PATCH /api/findings/{id}` ve
+`GET /api/audit` bu panel için eklendi; daha önce `Finding` veri
+modelde tanımlıydı ama hiçbir API'ye bağlı değildi.
+
 ## Kimlik doğrulama
 
 Bu kişisel asistan tek kullanıcı için tasarlandı. `/health` ve

@@ -87,6 +87,68 @@ export function createProject(input: {
   });
 }
 
+export type TaskStatus =
+  | "pending"
+  | "awaiting_approval"
+  | "running"
+  | "completed"
+  | "failed"
+  | "rejected";
+
+export interface Task {
+  id: string;
+  project_id: string;
+  title: string;
+  agent_role: string;
+  status: TaskStatus;
+  requires_approval: boolean;
+}
+
+export function listTasks(projectId: string): Promise<Task[]> {
+  return request<Task[]>(`/tasks?project_id=${encodeURIComponent(projectId)}`);
+}
+
+export function approveTask(taskId: string): Promise<Task> {
+  return request<Task>(`/tasks/${taskId}/approve`, { method: "POST" });
+}
+
+export type FindingStatus =
+  | "suspected"
+  | "verifying"
+  | "confirmed"
+  | "false_positive"
+  | "remediated_pending_retest";
+export type RiskLevelValue = "critical" | "high" | "medium" | "low";
+
+export interface Finding {
+  id: string;
+  project_id: string;
+  asset_id: string | null;
+  title: string;
+  description: string;
+  status: FindingStatus;
+  risk_level: RiskLevelValue | null;
+}
+
+export function listFindings(projectId: string): Promise<Finding[]> {
+  return request<Finding[]>(`/findings?project_id=${encodeURIComponent(projectId)}`);
+}
+
+export interface AuditEvent {
+  id: string;
+  project_id: string | null;
+  actor: string;
+  action: string;
+  details: Record<string, unknown>;
+  created_at: string;
+}
+
+export function listAuditEvents(projectId: string, limit = 10): Promise<AuditEvent[]> {
+  return request<AuditEvent[]>(
+    `/audit?project_id=${encodeURIComponent(projectId)}&limit=${limit}`
+  );
+}
+
 export interface AiDraftResponse {
   draft: string;
   available: boolean;
